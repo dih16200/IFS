@@ -445,8 +445,9 @@ function animate() {
     const liftAcceleration = dynamicPressureFactor * liftCoefficient;
     acceleration.addScaledVector(liftDirection, liftAcceleration);
 
-    const dragAcceleration = 0.00016 * speed * speed
-      + 0.55 * liftCoefficient * liftCoefficient;
+    const parasiteDrag = 0.0009 * speed * speed;
+    const inducedDrag = 0.75 * liftCoefficient * liftCoefficient;
+    const dragAcceleration = parasiteDrag + inducedDrag;
     acceleration.addScaledVector(airDirection, -dragAcceleration);
   }
 
