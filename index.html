@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="theme-color" content="#101722">
-<title>I Flight Simulator — F-16 Test</title>
+<title>IFS — F-16 Test</title>
 <style>
 :root { color-scheme: dark; --panel:rgba(10,17,27,.78); --line:rgba(255,255,255,.2); --accent:#e23b3b; }
 * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
@@ -38,7 +38,7 @@ canvas { display:block; width:100%; height:100%; }
 <body>
 <div id="hud">
   <div class="top">
-    <div class="panel"><div class="brand">ISA FLIGHT SIMULATOR</div><div id="status">Loading F-16…</div></div>
+    <div class="panel"><div class="brand">IFS</div><div id="status">Loading F-16…</div></div>
     <div class="panel metrics">
       <div class="metric"><small>IAS</small><strong><span id="speed">0</span> <small>km/h</small></strong></div>
       <div class="metric"><small>ALT</small><strong><span id="alt">0</span> <small>m</small></strong></div>
@@ -121,8 +121,14 @@ let throttleInput = Number(throttle.value)/100;
 let yokeX = 0, yokeY = 0;
 const clock = new THREE.Clock();
 const forward = new THREE.Vector3();
-const cameraTarget = new THREE.Vector3();
-const desiredCamera = new THREE.Vector3();
+
+// Rigid chase-camera offset, expressed in aircraft-local coordinates.
+const cameraOffset = new THREE.Vector3(0, 5, -17);
+const cameraPosition = new THREE.Vector3();
+const cameraFlip = new THREE.Quaternion().setFromAxisAngle(
+  new THREE.Vector3(0, 1, 0),
+  Math.PI
+);
 
 function updateYokeVisual() {
   yoke.style.transform = `translate(${yokeX*44}px, ${yokeY*44}px)`;
@@ -164,12 +170,12 @@ function animate() {
   aircraft.position.y += (yokeY*speed*0.24 - 0.6)*dt;
   aircraft.position.y = Math.max(4, aircraft.position.y);
 
-  // Smooth chase camera, slightly above and behind the aircraft.
-  const behind = new THREE.Vector3(0,5,-17).applyQuaternion(aircraft.quaternion);
-  desiredCamera.copy(aircraft.position).add(behind);
-  camera.position.lerp(desiredCamera,1-Math.exp(-3*dt));
-  cameraTarget.copy(aircraft.position).add(forward.clone().multiplyScalar(12));
-  camera.lookAt(cameraTarget);
+  // Rigid chase camera: position and orientation follow every aircraft rotation.
+  cameraPosition.copy(cameraOffset).applyQuaternion(aircraft.quaternion);
+  camera.position.copy(aircraft.position).add(cameraPosition);
+
+  // The camera looks along the aircraft's forward (+Z) axis.
+  camera.quaternion.copy(aircraft.quaternion).multiply(cameraFlip);
 
   speedEl.textContent = Math.round(speed*3.6);
   altEl.textContent = Math.round(aircraft.position.y);
