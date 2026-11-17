@@ -309,11 +309,19 @@ loader.load('./F-16.glb', (gltf) => {
   statusEl.textContent = 'Could not load F-16.glb — check both files are in the same folder';
 });
 
-// Forward is local +Z.
+// Forward is local +Z. Start with a small nose-up attitude for level flight.
 aircraft.position.set(0, 45, 0);
+aircraft.rotation.x = -0.07;
 updateTerrainChunks();
 
-let speed = 48;
+let speed = 105;
+const velocity = new THREE.Vector3(0, 0, 105);
+const aircraftUp = new THREE.Vector3();
+const liftDirection = new THREE.Vector3();
+const acceleration = new THREE.Vector3();
+let pitchRate = 0;
+let rollRate = 0;
+let yawRate = 0;
 let throttleInput = Number(throttle.value)/100;
 let yokeX = 0;
 let yokeY = 0;
@@ -386,31 +394,79 @@ function animate() {
 
   const dt = Math.min(clock.getDelta(), 0.04);
 
-  // Basic arcade flight model
-  const targetSpeed = 18 + throttleInput * 105;
-  speed += (targetSpeed - speed) * dt * 0.22;
+  // Airspeed changes naturally through thrust and aerodynamic drag.
+  aircraft.getWorldDirection(forward);
+  aircraftUp.set(0, 1, 0).applyQuaternion(aircraft.quaternion);
 
-  // PITCH: joystick UP = nose DOWN
-  //        joystick DOWN = nose UP
-  aircraft.rotateX(yokeY * 0.72 * dt);
+  const controlAuthority = THREE.MathUtils.clamp(speed / 100, 0.35, 1.25);
 
-  // Roll
-  aircraft.rotateZ(yokeX * 0.95 * dt);
+  // Controls have a little inertia instead of instantly rotating the aircraft.
+  const targetPitchRate = yokeY * 0.62 * controlAuthority;
+  const targetRollRate = yokeX * 0.90 * controlAuthority;
+  pitchRate += (targetPitchRate - pitchRate) * Math.min(1, dt * 4.5);
+  rollRate += (targetRollRate - rollRate) * Math.min(1, dt * 4.5);
+  yawRate += (0 - yawRate) * Math.min(1, dt * 2.5);
 
-  // Gentle yaw
-  aircraft.rotateY(yokeX * 0.30 * dt);
+  // Preserve the tested pitch direction: UP = nose down, DOWN = nose up.
+  aircraft.rotateX(pitchRate * dt);
+  aircraft.rotateZ(rollRate * dt);
+  aircraft.rotateY(yawRate * dt);
 
   aircraft.getWorldDirection(forward);
-  aircraft.position.addScaledVector(forward, speed * dt);
+  aircraftUp.set(0, 1, 0).applyQuaternion(aircraft.quaternion);
 
-  // Joystick UP = descend, DOWN = climb
-  aircraft.position.y += (-yokeY * speed * 0.24 - 0.6) * dt;
-  aircraft.position.y = Math.max(4, aircraft.position.y);
+  speed = velocity.length();
+  const airDirection = speed > 0.1
+    ? velocity.clone().multiplyScalar(1 / speed)
+    : forward.clone();
 
-  // Stream terrain around the aircraft
+  // Angle of attack: the angle between the aircraft's nose and airflow.
+  const aoa = Math.atan2(
+    -airDirection.dot(aircraftUp),
+    airDirection.dot(forward)
+  );
+
+  // Simplified F-16 aerodynamic model: lift, stall and induced drag.
+  let liftCoefficient = THREE.MathUtils.clamp(0.28 + 4.8 * aoa, -0.9, 1.55);
+  const stallAngle = Math.abs(aoa);
+  if (stallAngle > 0.26) {
+    liftCoefficient *= THREE.MathUtils.clamp(1 - (stallAngle - 0.26) * 1.8, 0.35, 1);
+  }
+
+  liftDirection.copy(aircraftUp)
+    .addScaledVector(airDirection, -aircraftUp.dot(airDirection));
+  if (liftDirection.lengthSq() > 0.0001) liftDirection.normalize();
+
+  acceleration.set(0, -9.81, 0); // Gravity
+  acceleration.addScaledVector(forward, 11 * throttleInput); // Engine thrust
+
+  if (speed > 1 && liftDirection.lengthSq() > 0.0001) {
+    const dynamicPressureFactor = 0.5 * 1.225 * speed * speed * 27.87 / 12000;
+    const liftAcceleration = dynamicPressureFactor * liftCoefficient;
+    acceleration.addScaledVector(liftDirection, liftAcceleration);
+
+    const dragAcceleration = 0.00016 * speed * speed
+      + 0.55 * liftCoefficient * liftCoefficient;
+    acceleration.addScaledVector(airDirection, -dragAcceleration);
+  }
+
+  // Integrate forces into velocity and position.
+  velocity.addScaledVector(acceleration, dt);
+  aircraft.position.addScaledVector(velocity, dt);
+  speed = velocity.length();
+
+  // Stop the aircraft passing through the terrain.
+  const groundY = terrainHeight(aircraft.position.x, aircraft.position.z) + 4;
+  if (aircraft.position.y < groundY) {
+    aircraft.position.y = groundY;
+    if (velocity.y < 0) velocity.y = 0;
+    velocity.multiplyScalar(0.82);
+  }
+
+  // Stream terrain around the aircraft.
   updateTerrainChunks();
 
-  // Rigid chase camera
+  // Rigid chase camera.
   cameraPosition.copy(cameraOffset).applyQuaternion(aircraft.quaternion);
   camera.position.copy(aircraft.position).add(cameraPosition);
   camera.quaternion.copy(aircraft.quaternion).multiply(cameraFlip);
