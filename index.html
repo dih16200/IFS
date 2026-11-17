@@ -131,13 +131,14 @@ const cameraFlip = new THREE.Quaternion().setFromAxisAngle(
 );
 
 function updateYokeVisual() {
-  yoke.style.transform = `translate(${yokeX*44}px, ${yokeY*44}px)`;
+  yoke.style.transform = `translate(${yokeX*44}px, ${-yokeY*44}px)`;
 }
 function setYokeFromPointer(e) {
   const r = yokeWrap.getBoundingClientRect();
   const cx = r.left + r.width/2, cy = r.top + r.height/2;
   yokeX = THREE.MathUtils.clamp((e.clientX-cx)/(r.width*0.36),-1,1);
-  yokeY = THREE.MathUtils.clamp((e.clientY-cy)/(r.height*0.36),-1,1);
+  // Inverted pitch axis: pushing the stick up commands nose-up.
+  yokeY = -THREE.MathUtils.clamp((e.clientY-cy)/(r.height*0.36),-1,1);
   updateYokeVisual();
 }
 let yokePointer = null;
@@ -167,7 +168,7 @@ function animate() {
   aircraft.getWorldDirection(forward);
   aircraft.position.addScaledVector(forward, speed*dt);
   // Keep the test aircraft airborne; pitch input directly affects climb rate.
-  aircraft.position.y += (-yokeY*speed*0.24 - 0.6)*dt;
+  aircraft.position.y += (yokeY*speed*0.24 - 0.6)*dt;
   aircraft.position.y = Math.max(4, aircraft.position.y);
 
   // Rigid chase camera: position and orientation follow every aircraft rotation.
