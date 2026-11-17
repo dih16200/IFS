@@ -87,26 +87,39 @@ document.body.prepend(renderer.domElement);
 
 scene.add(new THREE.HemisphereLight(0xddeeff, 0x536070, 2.0));
 const sun = new THREE.DirectionalLight(0xffffff, 2.2);
-sun.position.set(-80,120,-40); scene.add(sun);
+sun.position.set(-80,120,-40);
+scene.add(sun);
 
-// A simple visual test environment: sky, horizon and a large ground grid.
-const ground = new THREE.Mesh(new THREE.PlaneGeometry(4000,4000), new THREE.MeshStandardMaterial({color:0x526b54, roughness:1}));
-ground.rotation.x = -Math.PI/2; ground.position.y = -8; scene.add(ground);
+// Test environment
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(4000,4000),
+  new THREE.MeshStandardMaterial({color:0x526b54, roughness:1})
+);
+ground.rotation.x = -Math.PI/2;
+ground.position.y = -8;
+scene.add(ground);
+
 const grid = new THREE.GridHelper(2000,100,0x738b75,0x718477);
-grid.position.y = -7.8; scene.add(grid);
+grid.position.y = -7.8;
+scene.add(grid);
 
 const aircraft = new THREE.Group();
 scene.add(aircraft);
+
 let model = null;
 const loader = new GLTFLoader();
+
 loader.load('./F-16.glb', (gltf) => {
   model = gltf.scene;
   const box = new THREE.Box3().setFromObject(model);
   const size = box.getSize(new THREE.Vector3());
   const center = box.getCenter(new THREE.Vector3());
+
   model.position.sub(center);
+
   const longest = Math.max(size.x,size.y,size.z);
   model.scale.setScalar(12 / longest);
+
   aircraft.add(model);
   statusEl.textContent = 'F-16 loaded · test flight ready';
 }, undefined, (err) => {
@@ -114,39 +127,71 @@ loader.load('./F-16.glb', (gltf) => {
   statusEl.textContent = 'Could not load F-16.glb — check both files are in the same folder';
 });
 
-// Forward is local +Z. Start airborne for the first control test.
+// Forward is local +Z.
 aircraft.position.set(0, 45, 0);
-let speed = 48; // m/s, arcade test value
+
+let speed = 48;
 let throttleInput = Number(throttle.value)/100;
-let yokeX = 0, yokeY = 0;
+let yokeX = 0;
+let yokeY = 0;
+
 const clock = new THREE.Clock();
 const forward = new THREE.Vector3();
 
-// Rigid chase-camera offset, expressed in aircraft-local coordinates.
+// Chase camera
 const cameraOffset = new THREE.Vector3(0, 5, -17);
 const cameraPosition = new THREE.Vector3();
+
 const cameraFlip = new THREE.Quaternion().setFromAxisAngle(
   new THREE.Vector3(0, 1, 0),
   Math.PI
 );
 
 function updateYokeVisual() {
-  yoke.style.transform = `translate(${yokeX*44}px, ${-yokeY*44}px)`;
+  yoke.style.transform =
+    `translate(${yokeX*44}px, ${-yokeY*44}px)`;
 }
+
 function setYokeFromPointer(e) {
   const r = yokeWrap.getBoundingClientRect();
-  const cx = r.left + r.width/2, cy = r.top + r.height/2;
-  yokeX = THREE.MathUtils.clamp((e.clientX-cx)/(r.width*0.36),-1,1);
-  // Inverted pitch axis: pushing the stick up commands nose-up.
-  yokeY = -THREE.MathUtils.clamp((e.clientY-cy)/(r.height*0.36),-1,1);
+  const cx = r.left + r.width/2;
+  const cy = r.top + r.height/2;
+
+  yokeX = THREE.MathUtils.clamp(
+    (e.clientX-cx)/(r.width*0.36), -1, 1
+  );
+
+  // Joystick up/down input
+  yokeY = -THREE.MathUtils.clamp(
+    (e.clientY-cy)/(r.height*0.36), -1, 1
+  );
+
   updateYokeVisual();
 }
+
 let yokePointer = null;
-yokeWrap.addEventListener('pointerdown', e => { yokePointer=e.pointerId; yokeWrap.setPointerCapture(e.pointerId); setYokeFromPointer(e); });
-yokeWrap.addEventListener('pointermove', e => { if(e.pointerId===yokePointer) setYokeFromPointer(e); });
-function releaseYoke(e) { if(e.pointerId===yokePointer){ yokePointer=null; yokeX=0; yokeY=0; updateYokeVisual(); } }
-yokeWrap.addEventListener('pointerup',releaseYoke);
-yokeWrap.addEventListener('pointercancel',releaseYoke);
+
+yokeWrap.addEventListener('pointerdown', e => {
+  yokePointer = e.pointerId;
+  yokeWrap.setPointerCapture(e.pointerId);
+  setYokeFromPointer(e);
+});
+
+yokeWrap.addEventListener('pointermove', e => {
+  if(e.pointerId === yokePointer) setYokeFromPointer(e);
+});
+
+function releaseYoke(e) {
+  if(e.pointerId === yokePointer) {
+    yokePointer = null;
+    yokeX = 0;
+    yokeY = 0;
+    updateYokeVisual();
+  }
+}
+
+yokeWrap.addEventListener('pointerup', releaseYoke);
+yokeWrap.addEventListener('pointercancel', releaseYoke);
 
 throttle.addEventListener('input', () => {
   throttleInput = Number(throttle.value)/100;
@@ -155,38 +200,46 @@ throttle.addEventListener('input', () => {
 
 function animate() {
   requestAnimationFrame(animate);
+
   const dt = Math.min(clock.getDelta(),0.04);
 
-  // Basic arcade flight model: throttle changes speed; yoke controls pitch and bank.
+  // Basic arcade flight model
   const targetSpeed = 18 + throttleInput*105;
   speed += (targetSpeed-speed)*dt*0.22;
-  aircraft.rotateX(yokeY * 0.72 * dt);
+
+  // Corrected pitch direction
+  aircraft.rotateX(-yokeY * 0.72 * dt);
+
+  // Roll
   aircraft.rotateZ(yokeX * 0.95 * dt);
-  // Gentle yaw follows bank, giving the aircraft a coordinated turn feel.
+
+  // Gentle yaw
   aircraft.rotateY(yokeX * 0.30 * dt);
 
   aircraft.getWorldDirection(forward);
   aircraft.position.addScaledVector(forward, speed*dt);
-  // Keep the test aircraft airborne; pitch input directly affects climb rate.
-  aircraft.position.y += (-yokeY*speed*0.24 - 0.6)*dt;
+
+  // Corrected climb/descent response
+  aircraft.position.y += (yokeY*speed*0.24 - 0.6)*dt;
   aircraft.position.y = Math.max(4, aircraft.position.y);
 
-  // Rigid chase camera: position and orientation follow every aircraft rotation.
+  // Rigid chase camera
   cameraPosition.copy(cameraOffset).applyQuaternion(aircraft.quaternion);
   camera.position.copy(aircraft.position).add(cameraPosition);
-
-  // The camera looks along the aircraft's forward (+Z) axis.
   camera.quaternion.copy(aircraft.quaternion).multiply(cameraFlip);
 
   speedEl.textContent = Math.round(speed*3.6);
   altEl.textContent = Math.round(aircraft.position.y);
   thrRead.textContent = Math.round(throttleInput*100);
+
   renderer.render(scene,camera);
 }
+
 animate();
 
 addEventListener('resize', () => {
-  camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
   renderer.setSize(innerWidth,innerHeight);
 });
 </script>
