@@ -159,7 +159,7 @@ function animate() {
   // Basic arcade flight model: throttle changes speed; yoke controls pitch and bank.
   const targetSpeed = 18 + throttleInput*105;
   speed += (targetSpeed-speed)*dt*0.22;
-  aircraft.rotateX(yokeY * 0.72 * dt);
+  aircraft.rotateX(-yokeY * 0.72 * dt);
   aircraft.rotateZ(yokeX * 0.95 * dt);
   // Gentle yaw follows bank, giving the aircraft a coordinated turn feel.
   aircraft.rotateY(yokeX * 0.30 * dt);
@@ -167,7 +167,7 @@ function animate() {
   aircraft.getWorldDirection(forward);
   aircraft.position.addScaledVector(forward, speed*dt);
   // Keep the test aircraft airborne; pitch input directly affects climb rate.
-  aircraft.position.y += (yokeY*speed*0.24 - 0.6)*dt;
+  aircraft.position.y += (-yokeY*speed*0.24 - 0.6)*dt;
   aircraft.position.y = Math.max(4, aircraft.position.y);
 
   // Rigid chase camera: position and orientation follow every aircraft rotation.
