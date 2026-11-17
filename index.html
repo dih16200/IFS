@@ -391,7 +391,7 @@ function animate() {
   speed += (targetSpeed-speed)*dt*0.22;
 
   // Corrected pitch direction
-  aircraft.rotateX(-yokeY * 0.72 * dt);
+  aircraft.rotateX(yokeY * 0.72 * dt);
 
   // Roll
   aircraft.rotateZ(yokeX * 0.95 * dt);
@@ -403,7 +403,7 @@ function animate() {
   aircraft.position.addScaledVector(forward, speed*dt);
 
   // Corrected climb/descent response
-  aircraft.position.y += (yokeY*speed*0.24 - 0.6)*dt;
+  aircraft.position.y += (-yokeY*speed*0.24 - 0.6)*dt;
   aircraft.position.y = Math.max(4, aircraft.position.y);
 
   // Stream terrain around the aircraft as it travels.
