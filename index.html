@@ -384,13 +384,14 @@ throttle.addEventListener('input', () => {
 function animate() {
   requestAnimationFrame(animate);
 
-  const dt = Math.min(clock.getDelta(),0.04);
+  const dt = Math.min(clock.getDelta(), 0.04);
 
   // Basic arcade flight model
-  const targetSpeed = 18 + throttleInput*105;
-  speed += (targetSpeed-speed)*dt*0.22;
+  const targetSpeed = 18 + throttleInput * 105;
+  speed += (targetSpeed - speed) * dt * 0.22;
 
-  // Corrected pitch direction
+  // PITCH: joystick UP = nose DOWN
+  //        joystick DOWN = nose UP
   aircraft.rotateX(yokeY * 0.72 * dt);
 
   // Roll
@@ -400,13 +401,13 @@ function animate() {
   aircraft.rotateY(yokeX * 0.30 * dt);
 
   aircraft.getWorldDirection(forward);
-  aircraft.position.addScaledVector(forward, speed*dt);
+  aircraft.position.addScaledVector(forward, speed * dt);
 
-  // Corrected climb/descent response
-  aircraft.position.y += (-yokeY*speed*0.24 - 0.6)*dt;
+  // Joystick UP = descend, DOWN = climb
+  aircraft.position.y += (-yokeY * speed * 0.24 - 0.6) * dt;
   aircraft.position.y = Math.max(4, aircraft.position.y);
 
-  // Stream terrain around the aircraft as it travels.
+  // Stream terrain around the aircraft
   updateTerrainChunks();
 
   // Rigid chase camera
@@ -414,11 +415,11 @@ function animate() {
   camera.position.copy(aircraft.position).add(cameraPosition);
   camera.quaternion.copy(aircraft.quaternion).multiply(cameraFlip);
 
-  speedEl.textContent = Math.round(speed*3.6);
+  speedEl.textContent = Math.round(speed * 3.6);
   altEl.textContent = Math.round(aircraft.position.y);
-  thrRead.textContent = Math.round(throttleInput*100);
+  thrRead.textContent = Math.round(throttleInput * 100);
 
-  renderer.render(scene,camera);
+  renderer.render(scene, camera);
 }
 
 animate();
