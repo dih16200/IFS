@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="theme-color" content="#101722">
-<title>ISA Flight Simulator — F-16 Test</title>
+<title>I Flight Simulator — F-16 Test</title>
 <style>
 :root { color-scheme: dark; --panel:rgba(10,17,27,.78); --line:rgba(255,255,255,.2); --accent:#e23b3b; }
 * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
@@ -153,15 +153,15 @@ function animate() {
   // Basic arcade flight model: throttle changes speed; yoke controls pitch and bank.
   const targetSpeed = 18 + throttleInput*105;
   speed += (targetSpeed-speed)*dt*0.22;
-  aircraft.rotateX(-yokeY * 0.72 * dt);
-  aircraft.rotateZ(-yokeX * 0.95 * dt);
+  aircraft.rotateX(yokeY * 0.72 * dt);
+  aircraft.rotateZ(yokeX * 0.95 * dt);
   // Gentle yaw follows bank, giving the aircraft a coordinated turn feel.
-  aircraft.rotateY(-yokeX * 0.30 * dt);
+  aircraft.rotateY(yokeX * 0.30 * dt);
 
   aircraft.getWorldDirection(forward);
   aircraft.position.addScaledVector(forward, speed*dt);
   // Keep the test aircraft airborne; pitch input directly affects climb rate.
-  aircraft.position.y += (-yokeY*speed*0.24 - 0.6)*dt;
+  aircraft.position.y += (yokeY*speed*0.24 - 0.6)*dt;
   aircraft.position.y = Math.max(4, aircraft.position.y);
 
   // Smooth chase camera, slightly above and behind the aircraft.
