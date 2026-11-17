@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#101722">
+<title>ISA Flight Simulator — F-16 Test</title>
+<style>
+:root { color-scheme: dark; --panel:rgba(10,17,27,.78); --line:rgba(255,255,255,.2); --accent:#e23b3b; }
+* { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+html,body { margin:0; width:100%; height:100%; overflow:hidden; background:#8eb6d2; font-family:system-ui, sans-serif; touch-action:none; }
+canvas { display:block; width:100%; height:100%; }
+#hud { position:fixed; inset:0; pointer-events:none; color:white; }
+.top { position:absolute; top: max(12px,env(safe-area-inset-top)); left:12px; right:12px; display:flex; justify-content:space-between; gap:8px; align-items:flex-start; }
+.panel { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:9px 12px; backdrop-filter:blur(8px); box-shadow:0 4px 18px #0003; }
+.brand { font-weight:800; letter-spacing:.08em; font-size:12px; }
+#status { font-size:11px; opacity:.8; margin-top:3px; }
+.metrics { display:flex; gap:14px; text-align:right; font-variant-numeric:tabular-nums; }
+.metric small { display:block; opacity:.7; font-size:9px; letter-spacing:.08em; }
+.metric strong { font-size:16px; }
+#hint { position:absolute; top:86px; left:50%; transform:translateX(-50%); white-space:nowrap; font-size:11px; opacity:.8; }
+#controls { position:absolute; bottom:max(18px,env(safe-area-inset-bottom)); left:0; right:0; display:flex; align-items:flex-end; justify-content:space-between; padding:0 18px; }
+#yokeWrap { pointer-events:auto; width: min(34vw,150px); height:min(34vw,150px); position:relative; border-radius:50%; border:2px solid #ffffff66; background:radial-gradient(circle,#ffffff20,#07111c55); box-shadow:0 4px 20px #0004; touch-action:none; }
+#yokeWrap:before,#yokeWrap:after { content:""; position:absolute; background:#ffffff35; }
+#yokeWrap:before { width:1px; top:8%; bottom:8%; left:50%; }
+#yokeWrap:after { height:1px; left:8%; right:8%; top:50%; }
+#yoke { position:absolute; width:38%; height:38%; left:31%; top:31%; border-radius:50%; border:2px solid white; background:linear-gradient(145deg,#596a7c,#182535); box-shadow:0 3px 10px #0008; }
+#yokeLabel { position:absolute; left:50%; bottom:-23px; transform:translateX(-50%); font-size:10px; letter-spacing:.12em; white-space:nowrap; text-shadow:0 1px 4px black; }
+#throttlePanel { pointer-events:auto; width:72px; padding:10px 9px 12px; display:flex; flex-direction:column; align-items:center; gap:7px; }
+#throttle { writing-mode:vertical-lr; direction:rtl; width:34px; height: min(34vw,145px); accent-color:var(--accent); touch-action:pan-y; }
+#throttleValue { font-size:12px; font-weight:800; font-variant-numeric:tabular-nums; }
+#throttlePanel label { font-size:10px; letter-spacing:.1em; }
+#reset { pointer-events:auto; border:1px solid var(--line); border-radius:9px; padding:7px 10px; color:white; background:var(--panel); font-weight:700; }
+#bottomNote { position:absolute; bottom:max(10px,env(safe-area-inset-bottom)); left:50%; transform:translateX(-50%); font-size:9px; opacity:.55; white-space:nowrap; }
+@media (orientation:landscape) { #controls { padding:0 28px 10px; } #yokeWrap { width:120px;height:120px; } #throttle { height:118px; } }
+</style>
+</head>
+<body>
+<div id="hud">
+  <div class="top">
+    <div class="panel"><div class="brand">ISA FLIGHT SIMULATOR</div><div id="status">Loading F-16…</div></div>
+    <div class="panel metrics">
+      <div class="metric"><small>IAS</small><strong><span id="speed">0</span> <small>km/h</small></strong></div>
+      <div class="metric"><small>ALT</small><strong><span id="alt">0</span> <small>m</small></strong></div>
+      <div class="metric"><small>THR</small><strong><span id="thrRead">0</span><small>%</small></strong></div>
+    </div>
+  </div>
+  <div id="hint" class="panel">Yoke: pitch + roll · Throttle: engine power</div>
+  <div id="controls">
+    <div id="yokeWrap" aria-label="Flight yoke">
+      <div id="yoke"></div><div id="yokeLabel">Y O K E</div>
+    </div>
+    <div id="throttlePanel" class="panel">
+      <label for="throttle">THROTTLE</label>
+      <input id="throttle" type="range" min="0" max="100" value="65">
+      <div id="throttleValue">65%</div>
+    </div>
+  </div>
+</div>
+
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+const statusEl = document.querySelector('#status');
+const speedEl = document.querySelector('#speed');
+const altEl = document.querySelector('#alt');
+const thrRead = document.querySelector('#thrRead');
+const throttle = document.querySelector('#throttle');
+const throttleValue = document.querySelector('#throttleValue');
+const yokeWrap = document.querySelector('#yokeWrap');
+const yoke = document.querySelector('#yoke');
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x8eb6d2);
+scene.fog = new THREE.Fog(0x8eb6d2, 250, 1500);
+const camera = new THREE.PerspectiveCamera(65, innerWidth/innerHeight, 0.1, 5000);
+camera.position.set(0, 8, -22);
+const renderer = new THREE.WebGLRenderer({antialias:true, powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(devicePixelRatio, 1.6));
+renderer.setSize(innerWidth, innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.prepend(renderer.domElement);
+
+scene.add(new THREE.HemisphereLight(0xddeeff, 0x536070, 2.0));
+const sun = new THREE.DirectionalLight(0xffffff, 2.2);
+sun.position.set(-80,120,-40); scene.add(sun);
+
+// A simple visual test environment: sky, horizon and a large ground grid.
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(4000,4000), new THREE.MeshStandardMaterial({color:0x526b54, roughness:1}));
+ground.rotation.x = -Math.PI/2; ground.position.y = -8; scene.add(ground);
+const grid = new THREE.GridHelper(2000,100,0x738b75,0x718477);
+grid.position.y = -7.8; scene.add(grid);
+
+const aircraft = new THREE.Group();
+scene.add(aircraft);
+let model = null;
+const loader = new GLTFLoader();
+loader.load('./F-16.glb', (gltf) => {
+  model = gltf.scene;
+  const box = new THREE.Box3().setFromObject(model);
+  const size = box.getSize(new THREE.Vector3());
+  const center = box.getCenter(new THREE.Vector3());
+  model.position.sub(center);
+  const longest = Math.max(size.x,size.y,size.z);
+  model.scale.setScalar(12 / longest);
+  aircraft.add(model);
+  statusEl.textContent = 'F-16 loaded · test flight ready';
+}, undefined, (err) => {
+  console.error(err);
+  statusEl.textContent = 'Could not load F-16.glb — check both files are in the same folder';
+});
+
+// Forward is local +Z. Start airborne for the first control test.
+aircraft.position.set(0, 45, 0);
+let speed = 48; // m/s, arcade test value
+let throttleInput = Number(throttle.value)/100;
+let yokeX = 0, yokeY = 0;
+const clock = new THREE.Clock();
+const forward = new THREE.Vector3();
+const cameraTarget = new THREE.Vector3();
+const desiredCamera = new THREE.Vector3();
+
+function updateYokeVisual() {
+  yoke.style.transform = `translate(${yokeX*44}px, ${yokeY*44}px)`;
+}
+function setYokeFromPointer(e) {
+  const r = yokeWrap.getBoundingClientRect();
+  const cx = r.left + r.width/2, cy = r.top + r.height/2;
+  yokeX = THREE.MathUtils.clamp((e.clientX-cx)/(r.width*0.36),-1,1);
+  yokeY = THREE.MathUtils.clamp((e.clientY-cy)/(r.height*0.36),-1,1);
+  updateYokeVisual();
+}
+let yokePointer = null;
+yokeWrap.addEventListener('pointerdown', e => { yokePointer=e.pointerId; yokeWrap.setPointerCapture(e.pointerId); setYokeFromPointer(e); });
+yokeWrap.addEventListener('pointermove', e => { if(e.pointerId===yokePointer) setYokeFromPointer(e); });
+function releaseYoke(e) { if(e.pointerId===yokePointer){ yokePointer=null; yokeX=0; yokeY=0; updateYokeVisual(); } }
+yokeWrap.addEventListener('pointerup',releaseYoke);
+yokeWrap.addEventListener('pointercancel',releaseYoke);
+
+throttle.addEventListener('input', () => {
+  throttleInput = Number(throttle.value)/100;
+  throttleValue.textContent = `${throttle.value}%`;
+});
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(),0.04);
+
+  // Basic arcade flight model: throttle changes speed; yoke controls pitch and bank.
+  const targetSpeed = 18 + throttleInput*105;
+  speed += (targetSpeed-speed)*dt*0.22;
+  aircraft.rotateX(-yokeY * 0.72 * dt);
+  aircraft.rotateZ(-yokeX * 0.95 * dt);
+  // Gentle yaw follows bank, giving the aircraft a coordinated turn feel.
+  aircraft.rotateY(-yokeX * 0.30 * dt);
+
+  aircraft.getWorldDirection(forward);
+  aircraft.position.addScaledVector(forward, speed*dt);
+  // Keep the test aircraft airborne; pitch input directly affects climb rate.
+  aircraft.position.y += (-yokeY*speed*0.24 - 0.6)*dt;
+  aircraft.position.y = Math.max(4, aircraft.position.y);
+
+  // Smooth chase camera, slightly above and behind the aircraft.
+  const behind = new THREE.Vector3(0,5,-17).applyQuaternion(aircraft.quaternion);
+  desiredCamera.copy(aircraft.position).add(behind);
+  camera.position.lerp(desiredCamera,1-Math.exp(-3*dt));
+  cameraTarget.copy(aircraft.position).add(forward.clone().multiplyScalar(12));
+  camera.lookAt(cameraTarget);
+
+  speedEl.textContent = Math.round(speed*3.6);
+  altEl.textContent = Math.round(aircraft.position.y);
+  thrRead.textContent = Math.round(throttleInput*100);
+  renderer.render(scene,camera);
+}
+animate();
+
+addEventListener('resize', () => {
+  camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);
+});
+</script>
+</body>
+</html>
