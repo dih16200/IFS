@@ -283,8 +283,7 @@ apron.position.set(125,0.65,-540);
 airport.add(apron);
 scene.add(airport);
 
-// Load the initial 5 x 5 terrain area.
-updateTerrainChunks();
+// Initial terrain is generated after the aircraft object is created.
 
 const aircraft = new THREE.Group();
 scene.add(aircraft);
@@ -312,6 +311,7 @@ loader.load('./F-16.glb', (gltf) => {
 
 // Forward is local +Z.
 aircraft.position.set(0, 45, 0);
+updateTerrainChunks();
 
 let speed = 48;
 let throttleInput = Number(throttle.value)/100;
